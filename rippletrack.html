@@ -1,5 +1,4 @@
-
-<body>
+<head>
 <style type="text/css">
   .node circle {
     cursor: pointer;
@@ -16,7 +15,10 @@
     stroke-width: 1.5px;
   }
 </style>
-<script type="text/javascript" src="d3.v3.min.js"></script>
+</head>
+
+<body>
+<script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
 <script type="text/javascript">
 var m_left = 250
 var m_top = 20
@@ -132,6 +134,7 @@ function query(source) {
   var websocket = new WebSocket("wss://s1.ripple.com/")
   var account = source.name
   var marker = 0
+  console.log(source.name)
   websocket.onopen = function(e) {
     var cmd = '{"id":"1", "command":"account_info", "account":"'+account+'"}'
     websocket.send(cmd)}
@@ -169,13 +172,13 @@ function query(source) {
         if(type==="Payment") {
           var tx = transaction.tx
           var sender = tx.Account
-          var receiver = tx.Destination
+          var receiver = tx.Destination          
           if(sender===account && receiver!==account && !tx.Amount.currency) {
             if(isChild(account,source)) var link_value = tx.Amount/1000000
             else {
-              var n = {name:account, updated:false}
+              var n = {name:receiver, updated:false}
               children.push(n)
-              console.log(children)
+              console.log(sender,receiver,tx.Amount)
               source.children = children
               var link_value = tx.Amount/1000000}
             update(source)}}}}}
