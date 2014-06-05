@@ -1,91 +1,98 @@
 <head>
 <style type="text/css">
-  .node circle {
+  circle {
     cursor: pointer;
     fill: #fff;
     stroke: steelblue;
     stroke-width: 1.5px;
   }
 
-  .node text { font: 14px sans-serif; }
+  text { font: 14px sans-serif; }
 
-  path.link {
+  .link {
     fill: none;
     stroke: #ccc;
     stroke-width: 1.5px;
   }
+
+  .account { fill: grey;}
 </style>
 </head>
 
 <body>
 <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
 <script type="text/javascript">
-var m_left = 250
+var m_left = 280
 var m_top = 20
-var w = screen.availWidth - m_left * 2
-var h = screen.availHeight - m_top * 2
+var w = screen.availWidth - m_left
+var h = screen.availHeight - m_top
 
 var svg = d3.select("body")
     .append("svg")
-    .attr("width", w + m_left * 2)
-    .attr("height", h + m_top * 2)
+    .attr("width", w + m_left)
+    .attr("height", h + m_top)
     .append("svg:g")
     .attr("transform", "translate(" + m_left + "," + m_top + ")");
 var tree = d3.layout.tree()
     .size([h,w])
 var diagonal = d3.svg.diagonal()
     .projection(function(d) {return [d.y, d.x]})
+var link_value = []
 
-var data = [{name:"rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD", updated:false}]
+var data = [{id:0, name:"rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD", updated:false}]
 var root = data[0]
-    root.x0 = h/2
-    root.y0 = 0
+var nodes
 
-update(root)
+var radius = 5
+var duration = 500
 
-function update(source) {
-  var duration = 500
+update()
+
+function update() {
   // Update nodes
-  var nodes = tree.nodes(source)
-      nodes.forEach(function(d) {d.y = d.depth * m_left})
+  nodes = tree.nodes(root)
+  nodes.forEach(function(d) {d.y = d.depth * m_left})
   
-  // Enter any new nodes at the parent's previous position.
+  // Enter new nodes
   var node = svg.selectAll("g.node")
       .data(nodes)
   var nodeEnter = node.enter()
       .append("svg:g")
       .attr("class", "node")
-      .attr("transform", function(d) {return "translate(" + source.y0 + "," + source.x0 + ")"})
-      .on("click", function(d) {
-        if(d.updated) {toggle(d);update(d)}
-        else query(d)})
+      .attr("transform", function(d) {return "translate("+d.y+","+d.x+")"})
+      .on("click", function(d) {if(!d.updated) query(d)})
   nodeEnter.append("circle")
-      .attr("r",5)
-      .style("fill", function(d) {return d._children ? "lightsteelblue" : "#fff"})
+      .attr("r",1e-6)
   nodeEnter.append("text")
-      .text(function(n) {return n.name})
-      .attr("x", function(d) {return d.children || d._children ? -10 : 10})      
-      .attr("dy", ".35em")
-      .attr("text-anchor", function(d) {return d.children || d._children ? "end" : "start"})
-      .attr("fill", "grey")
+      .attr("class","account")
       .style("fill-opacity", 1e-6)
   nodeEnter.append("text")
-      .text(function(n) {return n.value})
-      .attr("y", 20)
-      .attr("text-anchor", "middle")
+      .text(function(d) {return d.value})
+      .attr("class","value")      
       .style("fill-opacity", 1e-6)
 
   // Transition nodes to their new position.
   var nodeUpdate = node.transition()
       .duration(duration)
-      .attr("transform", function(d) {return "translate(" + d.y + "," + d.x + ")"})
+      .attr("transform", function(d) {return "translate("+d.y+","+d.x+")"})
   nodeUpdate.select("circle")
-      .attr("r", 5)
-      .style("fill", function(d) {return d._children ? "lightsteelblue" : "#fff"})
-  nodeUpdate.selectAll("text")
-      .style("fill-opacity", 1)
+      .attr("r", radius)
+      .style("fill", function(d) {return d._children || d._children ? "lightsteelblue" : "#fff"})
+  nodeUpdate.select("text.account")
+    .text(function(d) {return d.name})
+    .attr("dy", ".35em")
+    .attr("x", function(d) {return radius*2*(d.children?-1:1)})
+    .attr("text-anchor", function(d) {return d.children ? "end" : "start"})
+    //.attr("y", -radius*2)
+    //.attr("text-anchor", "middle")    
+    .style("fill-opacity", 1)
+  nodeUpdate.select("text.value")
+    .text(function(d) {return comma(d.value)})
+    .attr("y", radius*5)
+    .attr("text-anchor", "middle")
+    .style("fill-opacity", 1)
 
-   // Transition exiting nodes to the parent's new position.
+  // Transition exiting nodes to the parent's new position.
   var nodeExit = node.exit().transition()
       .duration(duration)
       .attr("transform", function(d) {return "translate(" + source.y + "," + source.x + ")"})
@@ -98,35 +105,31 @@ function update(source) {
   // Update links
   var links = tree.links(nodes)
   var link = svg.selectAll("path.link")
-      .data(links)
+      .data(links, function(d) {return d.target.id})
   link.enter()
       .insert("path", "g")
+      .attr("id", function(d) {return d.target.id})
       .attr("class", "link")
       .attr("d", function(d) {
-        var o = {x: source.x0, y: source.y0}
+        var o = {x: d.x, y: d.y}
         return diagonal({source: o, target: o})})
-      .transition()
-      .duration(duration)
-      .attr("d", diagonal)
 
   // Transition links to their new position.
   link.transition()
       .duration(duration)
       .attr("d", diagonal)
 
-  // Transition exiting nodes to the parent's new position.
-  link.exit().transition()
-      .duration(duration)
-      .attr("d", function(d) {
-        var o = {x: source.x, y: source.y}
-        return diagonal({source: o, target: o})
-      })
-      .remove()
-
-  // Stash the old positions for transition.
-  nodes.forEach(function(d) {
-    d.x0 = d.x
-    d.y0 = d.y})
+  var textPath = svg.selectAll("textPath")
+      .data(link_value)
+      .enter()
+      .append("text")
+      .attr("dx",m_left/2)
+      .attr("dy",-radius)    
+      .append("textPath")
+      .attr("xlink:href", function(d) {return '#' + d.id })
+      .text(function(d) {return comma(d.value)})
+      .attr("class", "account")
+  
 }
 
 function query(source) {
@@ -134,69 +137,76 @@ function query(source) {
   var websocket = new WebSocket("wss://s1.ripple.com/")
   var account = source.name
   var marker = 0
-  console.log(source.name)
+  var len = nodes.length
+  source.value = "Checking..."
+  update()  
   websocket.onopen = function(e) {
     var cmd = '{"id":"1", "command":"account_info", "account":"'+account+'"}'
     websocket.send(cmd)}
-  websocket.onerror = function(e) {
-    source.value = JSON.parse(e.data)}
+  websocket.onclose = function(e) {console.log("closed");update()}
+  websocket.onerror = function(e) {console.log(JSON.parse(e.data));source.value = "error";websocket.close()}
   websocket.onmessage = function(e) {
-    var data = JSON.parse(e.data)
+    var data = JSON.parse(e.data)    
     if (data.status == "error") {
       source.value = data.error
-      return}
-    console.log(data);
+      console.log(data.error)
+      websocket.close()
+      return}    
     if(data.id==1) {
       var account_data = data.result.account_data
       var ledger = account_data.PreviousTxnLgrSeq
-      source.value = comma(parseFloat(account_data.Balance/1000000).toFixed(0))
-      console.log(source.value)
+      source.value = xrp(account_data.Balance)
+      update()
       source.updated = true
-      var cmd = '{"id":"2", "command":"account_tx", "account":"'+account+
-                '", "ledger_index_max":"'+ledger+'", "limit": "200"}'
-      websocket.send(cmd)
-      update(source)}      
+      var cmd = cmdAccountTx(2,"account_tx",account,ledger,200)
+      websocket.send(cmd)}      
     else {
       var result = data.result
-      if (data.result.marker) {
+      //console.log(result)
+      if (result.marker) {
         marker === result.marker.ledger ? 
         marker = result.marker.ledger - 1 : 
         marker = result.marker.ledger;
-        websocket.send({"id":"2", "command":"account_tx", "account":account,
-        "ledger_index_max": JSON.stringify(marker), "limit": "200"})}
-      else websocket.close()
-      var children = []
+        websocket.send(cmdAccountTx(2,"account_tx",account,marker,200))}
+      else websocket.close()      
       for (var i in result.transactions) {
         var transaction = result.transactions[i];
         var type = transaction.tx.TransactionType;    
         if(type==="Payment") {
           var tx = transaction.tx
           var sender = tx.Account
-          var receiver = tx.Destination          
+          var receiver = tx.Destination
           if(sender===account && receiver!==account && !tx.Amount.currency) {
-            if(isChild(account,source)) var link_value = tx.Amount/1000000
+            var id = childID(receiver,source.children)
+            var value = xrp(tx.Amount)
+            if(id>=0) {              
+              link_value.map(function(l) {
+                if(l.id===id) l.value += +value})}
             else {
-              var n = {name:receiver, updated:false}
-              children.push(n)
-              console.log(sender,receiver,tx.Amount)
-              source.children = children
-              var link_value = tx.Amount/1000000}
-            update(source)}}}}}
+              id = len++
+              console.log("id:"+id)
+              var n = {id:id, name:receiver, updated:false}
+              var l = {id:id, value:+value}
+              if(source.children) source.children.push(n)
+              else source.children = [n]
+              link_value.push(l)}
+            console.log(sender,receiver,comma(value))}}}
+      update()}}
 }
+function xrp(amount) {
+  return parseFloat(amount/1000000).toFixed(0)}
 function comma(x) {
-    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");}
-function isChild(name, node) {
-  for(i in node.children) if(node.children[i].name===name) return true
-  return false
+  return x ? x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
+function childID(name, nodes) {
+  for(c in nodes) {
+    if(nodes[c].name===name) return nodes[c].id}
+  return -1
 }
-function toggle(d) {
-  if (d.children) {
-    d._children = d.children
-    d.children = null
-  } else {
-    d.children = d._children
-    d._children = null
-  }
+function cmdAccountTx(id, cmd, account, ledger, limit) {
+  return JSON.stringify({
+      id: id, command: cmd, account: account,
+      ledger_index_max: ledger, limit: limit })
 }
+
 </script>
 </body>
