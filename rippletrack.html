@@ -1,28 +1,31 @@
 <head>
 <style type="text/css">
-  circle {
-    cursor: pointer;
-    fill: #fff;
-    stroke: steelblue;
-    stroke-width: 1.5px;
-  }
 
-  text { font: 14px sans-serif; }
+circle {
+  cursor: pointer;
+  fill: #fff;
+  stroke: steelblue;
+  stroke-width: 1.5px;
+}
 
-  .link {
-    fill: none;
-    stroke: #ccc;
-    stroke-width: 1.5px;
-  }
+.value { font: 16px;}
+text { font: 14px sans-serif; }
 
-  .account { fill: grey;}
+.link {
+  fill: none;
+  stroke: #ccc;
+  stroke-width: 1.5px;
+}
+
+.account,.pay { fill: grey;}
+
 </style>
 </head>
 
 <body>
 <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
 <script type="text/javascript">
-var m_left = 280
+var m_left = 80
 var m_top = 20
 var w = screen.availWidth - m_left
 var h = screen.availHeight - m_top
@@ -39,19 +42,19 @@ var diagonal = d3.svg.diagonal()
     .projection(function(d) {return [d.y, d.x]})
 var link_value = []
 
-var data = [{id:0, name:"rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD", updated:false}]
+var data = [{name:"rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD", updated:false}]
 var root = data[0]
 var nodes
 
 var radius = 5
 var duration = 500
 
-update()
+update(root)
 
-function update() {
+function update(source) {
   // Update nodes
   nodes = tree.nodes(root)
-  nodes.forEach(function(d) {d.y = d.depth * m_left})
+  nodes.forEach(function(d) {d.y = d.depth * 280})
   
   // Enter new nodes
   var node = svg.selectAll("g.node")
@@ -60,14 +63,13 @@ function update() {
       .append("svg:g")
       .attr("class", "node")
       .attr("transform", function(d) {return "translate("+d.y+","+d.x+")"})
-      .on("click", function(d) {if(!d.updated) query(d)})
+      .on("click", function(d) {if(!d.updated) query(d); else toggle(d)})
   nodeEnter.append("circle")
       .attr("r",1e-6)
   nodeEnter.append("text")
       .attr("class","account")
       .style("fill-opacity", 1e-6)
   nodeEnter.append("text")
-      .text(function(d) {return d.value})
       .attr("class","value")      
       .style("fill-opacity", 1e-6)
 
@@ -79,18 +81,15 @@ function update() {
       .attr("r", radius)
       .style("fill", function(d) {return d._children || d._children ? "lightsteelblue" : "#fff"})
   nodeUpdate.select("text.account")
-    .text(function(d) {return d.name})
-    .attr("dy", ".35em")
-    .attr("x", function(d) {return radius*2*(d.children?-1:1)})
-    .attr("text-anchor", function(d) {return d.children ? "end" : "start"})
-    //.attr("y", -radius*2)
-    //.attr("text-anchor", "middle")    
-    .style("fill-opacity", 1)
+      .text(function(d) {return shorten(d.name)})
+      .attr("y", -radius*2)
+      .attr("text-anchor", "middle")    
+      .style("fill-opacity", 1)
   nodeUpdate.select("text.value")
-    .text(function(d) {return comma(d.value)})
-    .attr("y", radius*5)
-    .attr("text-anchor", "middle")
-    .style("fill-opacity", 1)
+      .text(function(d) {return comma(d.value)})
+      .attr("y", radius*5)
+      .attr("text-anchor", "middle")
+      .style("fill-opacity", 1)
 
   // Transition exiting nodes to the parent's new position.
   var nodeExit = node.exit().transition()
@@ -105,30 +104,41 @@ function update() {
   // Update links
   var links = tree.links(nodes)
   var link = svg.selectAll("path.link")
-      .data(links, function(d) {return d.target.id})
+      .data(links, function(d) {return d.source.name+d.target.name})
   link.enter()
       .insert("path", "g")
-      .attr("id", function(d) {return d.target.id})
+      .attr("id", function(d) {return d.source.name+d.target.name})
       .attr("class", "link")
       .attr("d", function(d) {
         var o = {x: d.x, y: d.y}
         return diagonal({source: o, target: o})})
-
+  
   // Transition links to their new position.
   link.transition()
       .duration(duration)
       .attr("d", diagonal)
 
+  // Transition exiting nodes to the parent's new position.
+  link.exit().transition()
+      .duration(duration)
+      .attr("d", function(d) {
+        var o = {x: source.x, y: source.y}
+        return diagonal({source: o, target: o})
+      })
+      .remove()
+
   var textPath = svg.selectAll("textPath")
       .data(link_value)
       .enter()
       .append("text")
-      .attr("dx",m_left/2)
+      .attr("x",-60)
       .attr("dy",-radius)    
       .append("textPath")
       .attr("xlink:href", function(d) {return '#' + d.id })
       .text(function(d) {return comma(d.value)})
-      .attr("class", "account")
+      .style("text-anchor","end") 
+      .attr("startOffset","100%")
+      .attr("class", "pay")
   
 }
 
@@ -144,12 +154,12 @@ function query(source) {
     var cmd = '{"id":"1", "command":"account_info", "account":"'+account+'"}'
     websocket.send(cmd)}
   websocket.onclose = function(e) {console.log("closed");update()}
-  websocket.onerror = function(e) {console.log(JSON.parse(e.data));source.value = "error";websocket.close()}
+  websocket.onerror = function(e) {source.value = "error";console.log("onerror");websocket.close()}
   websocket.onmessage = function(e) {
     var data = JSON.parse(e.data)    
     if (data.status == "error") {
       source.value = data.error
-      console.log(data.error)
+      console.log("error")
       websocket.close()
       return}    
     if(data.id==1) {
@@ -177,16 +187,15 @@ function query(source) {
           var sender = tx.Account
           var receiver = tx.Destination
           if(sender===account && receiver!==account && !tx.Amount.currency) {
-            var id = childID(receiver,source.children)
+            var idx = child(receiver,source.children)
+            console.log(idx)
             var value = xrp(tx.Amount)
-            if(id>=0) {              
+            if(idx) {              
               link_value.map(function(l) {
-                if(l.id===id) l.value += +value})}
+                if(l.id===account+receiver) l.value += +value})}
             else {
-              id = len++
-              console.log("id:"+id)
-              var n = {id:id, name:receiver, updated:false}
-              var l = {id:id, value:+value}
+              var n = {name:receiver, updated:false}
+              var l = {id:account+receiver, value:+value}
               if(source.children) source.children.push(n)
               else source.children = [n]
               link_value.push(l)}
@@ -197,16 +206,26 @@ function xrp(amount) {
   return parseFloat(amount/1000000).toFixed(0)}
 function comma(x) {
   return x ? x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
-function childID(name, nodes) {
-  for(c in nodes) {
-    if(nodes[c].name===name) return nodes[c].id}
-  return -1
+function shorten(str) {
+  return str.length>8 ? str.substring(0,4) + '..' + str.substring(str.length-4) : str;}
+function child(name, nodes) {
+  for(n in nodes) {
+    if(nodes[n].name===name) return n}
 }
 function cmdAccountTx(id, cmd, account, ledger, limit) {
   return JSON.stringify({
       id: id, command: cmd, account: account,
       ledger_index_max: ledger, limit: limit })
 }
-
+function toggle(d) {
+  if (d.children) {
+    d._children = d.children
+    d.children = null
+  } else {
+    d.children = d._children
+    d._children = null
+  }
+  update(d)
+}
 </script>
 </body>
