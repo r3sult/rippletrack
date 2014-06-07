@@ -1,6 +1,13 @@
 <head>
 <style type="text/css">
 
+input#address {
+  height: 33px;
+  width: 400px;
+  font-size: 18px;
+  padding-left: 10px;
+  margin: 20px 20px}
+
 circle {
   cursor: pointer;
   fill: #fff;
@@ -23,39 +30,45 @@ text { font: 14px sans-serif; }
 </head>
 
 <body>
+<input type="text" id="address" maxlength="34"/>
 <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
 <script type="text/javascript">
-var m_left = 80
+
+var txtAddr = document.getElementById("address");
+
+var m_left = 60
 var m_top = 20
 var w = screen.availWidth - m_left
-var h = screen.availHeight - m_top
+var h = screen.availHeight - 100
 
 var svg = d3.select("body")
     .append("svg")
     .attr("width", w + m_left)
     .attr("height", h + m_top)
     .append("svg:g")
-    .attr("transform", "translate(" + m_left + "," + m_top + ")");
+    .attr("transform", "translate(" + m_left + "," + m_top + ")")
 var tree = d3.layout.tree()
     .size([h,w])
 var diagonal = d3.svg.diagonal()
     .projection(function(d) {return [d.y, d.x]})
 var link_value = []
 
-var data = [{name:"rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD", updated:false}]
-var root = data[0]
-var nodes
-
+var root
 var radius = 5
 var duration = 500
 
-update(root)
+function init(){
+  var account = txtAddr.value.trim()
+  root = {name:account, updated:false}
+  query(root)
+  update(root)
+}
 
 function update(source) {
-  // Update nodes
-  nodes = tree.nodes(root)
+  // Update nodes  
+  var nodes = tree.nodes(root)
   nodes.forEach(function(d) {d.y = d.depth * 280})
-  
+
   // Enter new nodes
   var node = svg.selectAll("g.node")
       .data(nodes)
@@ -87,7 +100,7 @@ function update(source) {
       .style("fill-opacity", 1)
   nodeUpdate.select("text.value")
       .text(function(d) {return comma(d.value)})
-      .attr("y", radius*5)
+      .attr("y", radius*4)
       .attr("text-anchor", "middle")
       .style("fill-opacity", 1)
 
@@ -139,7 +152,6 @@ function update(source) {
       .style("text-anchor","end") 
       .attr("startOffset","100%")
       .attr("class", "pay")
-  
 }
 
 function query(source) {
@@ -147,7 +159,6 @@ function query(source) {
   var websocket = new WebSocket("wss://s1.ripple.com/")
   var account = source.name
   var marker = 0
-  var len = nodes.length
   source.value = "Checking..."
   update()  
   websocket.onopen = function(e) {
@@ -188,7 +199,6 @@ function query(source) {
           var receiver = tx.Destination
           if(sender===account && receiver!==account && !tx.Amount.currency) {
             var idx = child(receiver,source.children)
-            console.log(idx)
             var value = xrp(tx.Amount)
             if(idx) {              
               link_value.map(function(l) {
@@ -227,5 +237,12 @@ function toggle(d) {
   }
   update(d)
 }
+
+txtAddr.addEventListener("keyup",function(event){
+    if(event.keyCode == 13) init()})
+window.addEventListener("load", function() {
+  txtAddr.value = "rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD"
+  init()})
+
 </script>
 </body>
