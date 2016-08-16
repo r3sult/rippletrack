@@ -1,0 +1,248 @@
+<head>
+<style type="text/css">
+
+input#address {
+  height: 33px;
+  width: 400px;
+  font-size: 18px;
+  padding-left: 10px;
+  margin: 20px 20px}
+
+circle {
+  cursor: pointer;
+  fill: #fff;
+  stroke: steelblue;
+  stroke-width: 1.5px;
+}
+
+.value { font: 16px;}
+text { font: 14px sans-serif; }
+
+.link {
+  fill: none;
+  stroke: #ccc;
+  stroke-width: 1.5px;
+}
+
+.account,.pay { fill: grey;}
+
+</style>
+</head>
+
+<body>
+<input type="text" id="address" maxlength="34"/>
+<script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
+<script type="text/javascript">
+
+var txtAddr = document.getElementById("address");
+
+var m_left = 60
+var m_top = 20
+var w = screen.availWidth - m_left
+var h = screen.availHeight - 100
+
+var svg = d3.select("body")
+    .append("svg")
+    .attr("width", w + m_left)
+    .attr("height", h + m_top)
+    .append("svg:g")
+    .attr("transform", "translate(" + m_left + "," + m_top + ")")
+var tree = d3.layout.tree()
+    .size([h,w])
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) {return [d.y, d.x]})
+var link_value = []
+
+var root
+var radius = 5
+var duration = 500
+
+function init(){
+  var account = txtAddr.value.trim()
+  root = {name:account, updated:false}
+  query(root)
+  update(root)
+}
+
+function update(source) {
+  // Update nodes  
+  var nodes = tree.nodes(root)
+  nodes.forEach(function(d) {d.y = d.depth * 280})
+
+  // Enter new nodes
+  var node = svg.selectAll("g.node")
+      .data(nodes)
+  var nodeEnter = node.enter()
+      .append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) {return "translate("+d.y+","+d.x+")"})
+      .on("click", function(d) {if(!d.updated) query(d); else toggle(d)})
+  nodeEnter.append("circle")
+      .attr("r",1e-6)
+  nodeEnter.append("text")
+      .attr("class","account")
+      .style("fill-opacity", 1e-6)
+  nodeEnter.append("text")
+      .attr("class","value")      
+      .style("fill-opacity", 1e-6)
+
+  // Transition nodes to their new position.
+  var nodeUpdate = node.transition()
+      .duration(duration)
+      .attr("transform", function(d) {return "translate("+d.y+","+d.x+")"})
+  nodeUpdate.select("circle")
+      .attr("r", radius)
+      .style("fill", function(d) {return d._children || d._children ? "lightsteelblue" : "#fff"})
+  nodeUpdate.select("text.account")
+      .text(function(d) {return shorten(d.name)})
+      .attr("y", -radius*2)
+      .attr("text-anchor", "middle")    
+      .style("fill-opacity", 1)
+  nodeUpdate.select("text.value")
+      .text(function(d) {return comma(d.value)})
+      .attr("y", radius*4)
+      .attr("text-anchor", "middle")
+      .style("fill-opacity", 1)
+
+  // Transition exiting nodes to the parent's new position.
+  var nodeExit = node.exit().transition()
+      .duration(duration)
+      .attr("transform", function(d) {return "translate(" + source.y + "," + source.x + ")"})
+      .remove()
+  nodeExit.select("circle")
+      .attr("r", 1e-6)
+  nodeExit.selectAll("text")
+      .style("fill-opacity", 1e-6)
+
+  // Update links
+  var links = tree.links(nodes)
+  var link = svg.selectAll("path.link")
+      .data(links, function(d) {return d.source.name+d.target.name})
+  link.enter()
+      .insert("path", "g")
+      .attr("id", function(d) {return d.source.name+d.target.name})
+      .attr("class", "link")
+      .attr("d", function(d) {
+        var o = {x: d.x, y: d.y}
+        return diagonal({source: o, target: o})})
+  
+  // Transition links to their new position.
+  link.transition()
+      .duration(duration)
+      .attr("d", diagonal)
+
+  // Transition exiting nodes to the parent's new position.
+  link.exit().transition()
+      .duration(duration)
+      .attr("d", function(d) {
+        var o = {x: source.x, y: source.y}
+        return diagonal({source: o, target: o})
+      })
+      .remove()
+
+  var textPath = svg.selectAll("textPath")
+      .data(link_value)
+      .enter()
+      .append("text")
+      .attr("x",-60)
+      .attr("dy",-radius)    
+      .append("textPath")
+      .attr("xlink:href", function(d) {return '#' + d.id })
+      .text(function(d) {return comma(d.value)})
+      .style("text-anchor","end") 
+      .attr("startOffset","100%")
+      .attr("class", "pay")
+}
+
+function query(source) {
+  // Start websocket
+  var websocket = new WebSocket("wss://s1.ripple.com/")
+  var account = source.name
+  var marker = 0
+  source.value = "Checking..."
+  update()  
+  websocket.onopen = function(e) {
+    var cmd = '{"id":"1", "command":"account_info", "account":"'+account+'"}'
+    websocket.send(cmd)}
+  websocket.onclose = function(e) {console.log("closed");update()}
+  websocket.onerror = function(e) {source.value = "error";console.log("onerror");websocket.close()}
+  websocket.onmessage = function(e) {
+    var data = JSON.parse(e.data)    
+    if (data.status == "error") {
+      source.value = data.error
+      console.log("error")
+      websocket.close()
+      return}    
+    if(data.id==1) {
+      var account_data = data.result.account_data
+      var ledger = account_data.PreviousTxnLgrSeq
+      source.value = xrp(account_data.Balance)
+      update()
+      source.updated = true
+      var cmd = cmdAccountTx(2,"account_tx",account,ledger,200)
+      websocket.send(cmd)}      
+    else {
+      var result = data.result
+      //console.log(result)
+      if (result.marker) {
+        marker === result.marker.ledger ? 
+        marker = result.marker.ledger - 1 : 
+        marker = result.marker.ledger;
+        websocket.send(cmdAccountTx(2,"account_tx",account,marker,200))}
+      else websocket.close()      
+      for (var i in result.transactions) {
+        var transaction = result.transactions[i];
+        var type = transaction.tx.TransactionType;    
+        if(type==="Payment") {
+          var tx = transaction.tx
+          var sender = tx.Account
+          var receiver = tx.Destination
+          if(sender===account && receiver!==account && !tx.Amount.currency) {
+            var idx = child(receiver,source.children)
+            var value = xrp(tx.Amount)
+            if(idx) {              
+              link_value.map(function(l) {
+                if(l.id===account+receiver) l.value += +value})}
+            else {
+              var n = {name:receiver, updated:false}
+              var l = {id:account+receiver, value:+value}
+              if(source.children) source.children.push(n)
+              else source.children = [n]
+              link_value.push(l)}
+            console.log(sender,receiver,comma(value))}}}
+      update()}}
+}
+function xrp(amount) {
+  return parseFloat(amount/1000000).toFixed(0)}
+function comma(x) {
+  return x ? x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : ""}
+function shorten(str) {
+  return str.length>8 ? str.substring(0,4) + '..' + str.substring(str.length-4) : str;}
+function child(name, nodes) {
+  for(n in nodes) {
+    if(nodes[n].name===name) return n}
+}
+function cmdAccountTx(id, cmd, account, ledger, limit) {
+  return JSON.stringify({
+      id: id, command: cmd, account: account,
+      ledger_index_max: ledger, limit: limit })
+}
+function toggle(d) {
+  if (d.children) {
+    d._children = d.children
+    d.children = null
+  } else {
+    d.children = d._children
+    d._children = null
+  }
+  update(d)
+}
+
+txtAddr.addEventListener("keyup",function(event){
+    if(event.keyCode == 13) init()})
+window.addEventListener("load", function() {
+  txtAddr.value = "rJYMACXJd1eejwzZA53VncYmiK2kZSBxyD"
+  init()})
+
+</script>
+</body>
